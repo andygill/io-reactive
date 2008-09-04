@@ -1,4 +1,4 @@
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |
 -- Module: Data.Concurrent.Reactive
@@ -16,6 +16,7 @@ module Control.Concurrent.Reactive
 	( Action
 	, Request
 	, reactiveObjectIO
+--	, simpleReactiveObjectIO
 	) where
 
 import Control.Concurrent.Chan
@@ -30,15 +31,16 @@ type Request s a = s -> IO (s,a) -- state change + reply to be passed back to ca
 -- To consider; how do we handle proper exceptions?
 
 reactiveObjectIO
-    :: state
-    -> (() -> Action state)					-- will be the exeption mechanism
-    -> ( forall r . ThreadId 
-	       -> (Request state r -> IO ()) 
-	       -> (Action state -> IO ()) 
-	       -> object
+    :: (() -> Action state)					-- will be the exeption mechanism
+    -> state
+    -> (
+	   ThreadId 
+	-> (forall r. Request state r -> IO r) 
+	-> (Action state -> IO ()) 
+	-> object
        )
     -> IO object
-reactiveObjectIO state theHandler mkObject = do
+reactiveObjectIO theHandler state mkObject = do
   chan <- newChan
 
 	-- the state is passed as the argument, watch for strictness issues.
@@ -53,7 +55,7 @@ reactiveObjectIO state theHandler mkObject = do
         writeChan chan $ \ st -> do
            (st',r) <- fun st
            putMVar ret r
-	   return $ st'
+	   return $! st'
         takeMVar ret
 
   let actionit = writeChan chan
@@ -61,10 +63,18 @@ reactiveObjectIO state theHandler mkObject = do
    	-- We return the pid, so you can build an abort function
   pid <- forkIO $ dispatch state
 
-  return $ mkObject pid requestit actionit
-
-
-
+  return (mkObject pid requestit actionit)
+{-
+simpleReactiveObjectIO
+    :: state
+    -> ( forall r . ThreadId 
+	       -> (Request state r -> IO ()) 
+	       -> (Action state -> IO ()) 
+	       -> object
+       )
+    -> IO object
+simpleReactiveObjectIO = reactiveObjectIO $ \ () s -> return s
+-}
 
 
 
