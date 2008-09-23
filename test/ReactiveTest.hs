@@ -16,12 +16,13 @@ import System.IO
 data ProgressReport = ProgressReport
 	{ pr_text	:: String -> IO ()	-- say something
 	, pr_progress	:: String -> IO ()	-- temp message, overwritten by next message, or text
+        , pr_done       :: IO ()		-- wait for the object to finish, and delete it
 	}
 
 
 mkProgressReport :: Handle -> IO ProgressReport
 mkProgressReport h =
-	reactiveObjectIO handle state (\ _pid _req act ->  
+	reactiveObjectIO state (\ _pid req act done ->  
 	    ProgressReport 
 		   { pr_text = \ str -> act $ \ st -> do unwind st
 						 	 hPutStr h str
@@ -31,11 +32,11 @@ mkProgressReport h =
 							     hPutStr h str
 							     hFlush h
 							     return str
+                   , pr_done = done
 	 	   })
  where
 	unwind str = hPutStr h $ ['\b' | _ <- str ] ++ [' ' | _ <- str ] ++ ['\b' | _ <- str ]
 	state = ""
-	handle () s = return s
 
 main = do
 	report <- mkProgressReport stdout
@@ -45,4 +46,5 @@ main = do
 		 | n <- [1..10]
 		 ]
 	pr_text report  "[Done]\n"
+        pr_done report
 	return ()

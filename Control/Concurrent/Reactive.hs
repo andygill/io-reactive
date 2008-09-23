@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, GADTs #-}
 
 -- |
 -- Module: Data.Concurrent.Reactive
@@ -16,11 +16,11 @@ module Control.Concurrent.Reactive
 	( Action
 	, Request
 	, reactiveObjectIO
---	, simpleReactiveObjectIO
 	) where
 
 import Control.Concurrent.Chan
 import Control.Concurrent
+import Control.Exception as Ex
 
 -- An action is an IO-based change to an explicit state
 
@@ -29,52 +29,58 @@ type Request s a = s -> IO (s,a) -- state change + reply to be passed back to ca
 
 -- This is the 'forkIO' of the O'Haskell Object sub-system.
 -- To consider; how do we handle proper exceptions?
+--   we need to bullet-proof this for exception!
+
+-- Choices:
+--   * do the Requests see the failure
+--   * Actions do not see anything
+--   * 
+
+data Msg s = Act (Action s)
+           | forall a . Req (Request s a) (MVar a)
+           | Done (MVar ())
 
 reactiveObjectIO
-    :: (() -> Action state)					-- will be the exeption mechanism
-    -> state
+    :: state
     -> (
 	   ThreadId 
-	-> (forall r. Request state r -> IO r) 
-	-> (Action state -> IO ()) 
+	-> (forall r. Request state r -> IO r) 	-- requests
+	-> (Action state -> IO ()) 		-- actions
+        -> IO ()				-- done
 	-> object
        )
     -> IO object
-reactiveObjectIO theHandler state mkObject = do
+reactiveObjectIO state mkObject = do
   chan <- newChan
 
 	-- the state is passed as the argument, watch for strictness issues.
   let dispatch state = do
         action <- readChan chan
-        state' <- action $! state
-        dispatch $! state'
+        case action of
+          Act act -> do state1 <- act state
+                        dispatch $! state1
+          Req req box -> do (state1,ret) <- req state
+                            putMVar box ret
+                            dispatch $! state1
+          Done box -> do putMVar box ()
+                         return ()	-- no looping; we are done
+
+   	-- We return the pid, so you can build a hard-abort function
+        -- we need to think about this; how do you abort an object
+  pid <- forkIO $ dispatch state
 
 	-- This trick of using a return MVar is straight from Johan's PhD.
   let requestit fun = do 
         ret <- newEmptyMVar
-        writeChan chan $ \ st -> do
-           (st',r) <- fun st
-           putMVar ret r
-	   return $! st'
-        takeMVar ret
+        writeChan chan $ Req fun ret
+        takeMVar ret	-- wait for the object to react
 
-  let actionit = writeChan chan
+  let actionit act = writeChan chan $ Act act
 
-   	-- We return the pid, so you can build an abort function
-  pid <- forkIO $ dispatch state
+  let doneit = do
+        ret <- newEmptyMVar
+        writeChan chan $ Done ret
+        takeMVar ret	-- wait for the object to *finish*
 
-  return (mkObject pid requestit actionit)
-{-
-simpleReactiveObjectIO
-    :: state
-    -> ( forall r . ThreadId 
-	       -> (Request state r -> IO ()) 
-	       -> (Action state -> IO ()) 
-	       -> object
-       )
-    -> IO object
-simpleReactiveObjectIO = reactiveObjectIO $ \ () s -> return s
--}
-
-
+  return (mkObject pid requestit actionit doneit)
 
