@@ -4,15 +4,6 @@ import Control.Concurrent.Reactive
 import Control.Concurrent
 import System.IO
 
--- The inwards api is
---   say 
---   p <- start			-- start a message about progress towards a goal.
---   start_test p (args)	-- staring a test
---   progress p			-- 
---   done p			-- 
-
--- You can only test one at a time.
-
 data ProgressReport = ProgressReport
 	{ pr_text	:: String -> IO ()	-- say something
 	, pr_progress	:: String -> IO ()	-- temp message, overwritten by next message, or text

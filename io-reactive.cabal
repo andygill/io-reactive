@@ -13,6 +13,6 @@ Stability:	     alpha
 build-type: 	     Simple
 
 -- Trivial (build) test framework
---Executable:          io-reactive-test
---hs-source-dirs:	     test, .
---Main-is:             ReactiveTest.hs
+Executable:          io-reactive-test
+hs-source-dirs:	     test, .
+Main-is:             ReactiveTest.hs
