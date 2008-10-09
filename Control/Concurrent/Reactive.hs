@@ -16,11 +16,15 @@ module Control.Concurrent.Reactive
 	( Action
 	, Request
 	, reactiveObjectIO
+        , Sink
+        , pauseIO
+        , reactiveIO
 	) where
 
 import Control.Concurrent.Chan
 import Control.Concurrent
 import Control.Exception as Ex
+
 
 -- An action is an IO-based change to an explicit state
 
@@ -84,3 +88,19 @@ reactiveObjectIO state mkObject = do
 
   return (mkObject pid requestit actionit doneit)
 
+-- From Conal; a Sink is a object into which things are thrown.
+type Sink a = a -> IO ()
+
+-- This turns a reactive style call into a pausing IO call.
+pauseIO :: (a -> Sink b -> IO ()) -> a -> IO b
+pauseIO fn a = do
+    var <- newEmptyMVar
+    forkIO $ do fn a (\ b -> putMVar var b)
+    takeMVar var
+
+-- This turns a pausing IO call into a reactive style call.
+reactiveIO :: (a -> IO b) -> a -> Sink b -> IO ()
+reactiveIO fn a sinkB = do
+    forkIO $ do b <- fn a 
+                sinkB b
+    return ()
