@@ -1,5 +1,5 @@
 Name:                io-reactive
-Version:             0.1.2
+Version:             0.1.3
 Synopsis:            An API for generating TIMBER style reactive objects.
 Description:	     An API for generating reactive objects, as used in the TIMBER programming language.
 Category:            Control, Reactivity
