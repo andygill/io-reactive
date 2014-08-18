@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, GADTs #-}
+{-# LANGUAGE RankNTypes, GADTs, ScopedTypeVariables  #-}
 
 -- |
 -- Module: Data.Concurrent.Reactive
@@ -45,7 +45,7 @@ data Msg s = Act (Action s)
            | Done (MVar ())
 
 reactiveObjectIO
-    :: state
+    :: forall state object. state
     -> (
 	   ThreadId 
 	-> (forall r. Request state r -> IO r) 	-- requests
@@ -74,7 +74,8 @@ reactiveObjectIO state mkObject = do
   pid <- forkIO $ dispatch state
 
 	-- This trick of using a return MVar is straight from Johan's PhD.
-  let requestit fun = do 
+  let requestit :: forall r. Request state r -> IO r
+      requestit fun = do
         ret <- newEmptyMVar
         writeChan chan $ Req fun ret
         takeMVar ret	-- wait for the object to react
